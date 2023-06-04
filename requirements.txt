@@ -1,0 +1,10 @@
+django
+djangorestframework
+django-environ==0.9.0
+python-environ
+psycopg2
+pillow
+celery
+django-celery-beat
+Redis
+django-celery-results
