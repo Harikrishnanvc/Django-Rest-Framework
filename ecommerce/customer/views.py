@@ -3,16 +3,16 @@ from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework.views import APIView, status
 
-from .models import CustomerAccount, Address, Product, ProductCategory, ProductImage
+from .models import CustomerAccount, Address, Product, ProductImage
 from .pagination import CustomerListPagination
-from .serializers import CustomerSerializer, CustomerAccountSerializer, ProductSerializer
+from .serializers import CustomerSerializer, CustomerAccountSerializer, ProductSerializer, ProductImageSerializer
 
 
 def get_object(user_id: int):
     try:
         return CustomerAccount.objects.get(pk=user_id)
     except CustomerAccount.DoesNotExist:
-        raise Http404
+        raise Http404("Customer does not exist")
 
 
 class CustomerList(APIView):
@@ -46,7 +46,8 @@ class CustomerDetails(APIView):
 
     def patch(self, request, user_id: int):
         customer = get_object(user_id)
-        serializer = CustomerAccountSerializer(customer, data=request.data, partial=True)
+        serializer = CustomerAccountSerializer(customer, data=request.data, partial=True,
+                                               context={'request_data': request.data})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
@@ -55,46 +56,38 @@ class CustomerDetails(APIView):
     def delete(self, request, user_id: int):
         customer = get_object(user_id)
         customer.delete()
-        return Response(status=status.HTTP_200_OK)
+        return Response("Deleted Customer Successfully", status=status.HTTP_200_OK)
 
 
 class ProductRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
+
+#   TODO: While adding multiple images use slug(same slug for multiple images to filter those things)
 class ProductListCreateView(APIView):
     serializer_class = ProductSerializer
-
     pagination_class = CustomerListPagination
 
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
+        serializer = self.serializer_class(data=request.data, context={'context': request.data})
         if serializer.is_valid():
-            data_dict = serializer.data
-            print(data_dict)
-            product_owner = data_dict['product_owner']
-            product_name = data_dict['product_name']
-            product_description = data_dict['product_description']
-            product_price = data_dict['product_price']
-            product_quantity = data_dict['product_quantity']
-            product_category = data_dict['product_category']['name']
-            # product_image = data_dict['product_images']['image']
-            try:
-                product_category = ProductCategory.objects.get(name=product_category)
-
-                user = get_object(product_owner)
-                product_obj = Product.objects.create(product_owner=user, product_name=product_name,
-                                                     product_quantity=product_quantity,
-                                                     product_description=product_description,
-                                                     product_price=product_price,
-                                                     product_category=product_category,
-                                                     is_active=True)
-                product_obj.save()
-                # ProductImage.objects.create(product=product_obj, image=product_image)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            except ProductCategory.DoesNotExist:
-                raise Http404
+            image_list = request.FILES.getlist('product_image')
+            serializer.save()
+            for image in image_list:
+                product_image_serializer = ProductImageSerializer(data={'image': image})
+                if product_image_serializer.is_valid():
+                    product_image_serializer.save()
+                    serializer.product_image = product_image_serializer.data['id']
+                    image_id = product_image_serializer.data['id']
+                    product_image = ProductImage.objects.get(id=image_id)
+                    Product.objects.filter(id=serializer.data['id']).update(product_image=product_image)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def get(self, request):

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.relations import PrimaryKeyRelatedField
 
 from .models import CustomerAccount, Address, ProductCategory, Product, ProductImage
 
@@ -18,12 +19,13 @@ class CustomerAccountSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 'address']
 
     def update(self, instance, validated_data):
+        customer_data = self.context.get('request_data')['customer']
         address_data = validated_data.pop('address', None)
-        instance.email = validated_data.get('email', instance.email)
-        instance.username = validated_data.get('username', instance.username)
-        instance.password = validated_data.get('password', instance.password)
-        instance.first_name = validated_data.get('first_name', instance.first_name)
-        instance.last_name = validated_data.get('last_name', instance.last_name)
+
+        for field in self.Meta.fields:
+            if field in customer_data and customer_data[field] != getattr(instance, field):
+                setattr(instance, field, customer_data[field])
+
         if address_data:
             address_serializer = self.fields['address']
             address_instance = instance.address
@@ -56,46 +58,24 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    product_category = ProductCategorySerializer()
-    product_images = ProductImageSerializer(many=True, required=False)
+    product_category = PrimaryKeyRelatedField(queryset=ProductCategory.objects.all())
+    image_serializer = serializers.ImageField(required=False)
+    product_image = ProductImageSerializer(required=False)
 
     class Meta:
         model = Product
         fields = ['id', 'product_owner', 'product_name', 'product_description', 'product_category',
-                  'product_price', 'product_quantity', 'slug', 'is_active', 'created_time',
-                  'updated_time', 'product_images']
+                  'product_price', 'product_quantity', 'slug', 'created_time', 'product_image', 'updated_time',
+                  'image_serializer']
         extra_kwargs = {
-            "slug": {'required': False},
+            "slug": {'required': False}
         }
 
     def update(self, instance, validated_data):
-        category_data = validated_data.pop('product_category')
-        images_data = validated_data.pop('product_images')
-        category = instance.product_category
-        category.name = category_data.get('name', category.name)
-        category.is_active = category_data.get('is_active', category.is_active)
-        category.save()
-        instance.product_name = validated_data.get('product_name', instance.product_name)
-        instance.product_description = validated_data.get('product_description', instance.product_description)
-        instance.product_price = validated_data.get('product_price', instance.product_price)
-        instance.product_quantity = validated_data.get('product_quantity', instance.product_quantity)
-        instance.slug = validated_data.get('slug', instance.slug)
-        instance.is_active = validated_data.get('is_active', instance.is_active)
-        instance.save()
-
-        existing_images = list(instance.product_images.all())
-        for image_data in images_data:
-            image_id = image_data.get('id')
-            if image_id:
-                image = existing_images.pop(existing_images.index(ProductImage.objects.get(id=image_id)))
-                image.image = image_data.get('image', image.image)
-                image.save()
-            else:
-                ProductImage.objects.create(product=instance, **image_data)
-
-        for image in existing_images:
-            image.delete()
-
+        product_image = validated_data.pop('image_serializer', None)
+        instance = super().update(instance, validated_data)
+        if product_image:
+            ProductImage.objects.filter(product_images__id=instance.id).update(image=product_image)
         return instance
 
 

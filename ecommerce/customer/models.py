@@ -1,5 +1,5 @@
 import uuid
-from datetime import timedelta
+from datetime import timedelta, date
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -59,6 +59,15 @@ class ProductCategory(models.Model):
         return self.name
 
 
+class ProductImage(models.Model):
+    image = models.ImageField(upload_to='product_images/')
+    class Meta:
+        verbose_name_plural = "Product Image"
+
+    def __str__(self):
+        return f"Image for {self.image.name}"
+
+
 class Product(models.Model):
     product_owner = models.ForeignKey(CustomerAccount, on_delete=models.CASCADE)
     product_name = models.CharField(max_length=50)
@@ -67,26 +76,19 @@ class Product(models.Model):
     product_price = models.DecimalField(max_digits=10, decimal_places=2)
     product_quantity = models.PositiveIntegerField()
     slug = models.SlugField(unique=True)
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     end_date = models.DateField(null=True)
-    start_date = models.DateField(auto_now_add=True, null=True)
+    product_image = models.ForeignKey(ProductImage, on_delete=models.CASCADE, related_name='product_images', null=True)
     created_time = models.DateField(verbose_name='created time', auto_now_add=True)
     updated_time = models.DateField(verbose_name='updated time', auto_now=True)
 
     def save(self, *args, **kwargs):
         self.slug = slugify(self.product_name)
+        # self.end_date = date.today() + timedelta(days=60)
+
         if Product.objects.filter(slug=self.slug).exists():
-            self.end_date = self.start_date + timedelta(days=60)
             self.slug = f"{self.slug}-{uuid.uuid4().hex[:6]}"
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.product_name
-
-
-class ProductImage(models.Model):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='product_images')
-    image = models.ImageField(upload_to='product_images/')
-
-    def __str__(self):
-        return f"Image for {self.product.name}"

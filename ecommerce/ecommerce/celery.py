@@ -6,7 +6,7 @@ from celery import Celery
 from django.conf import settings
 from celery.schedules import crontab
 # Set the default Django settings module for the 'celery' program.
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecommerce.settings.py')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecommerce.settings')
 app = Celery('ecommerce')
 app.conf.enable_utc = False
 app.conf.update(timezone='Asia/Kolkata')
@@ -15,8 +15,8 @@ app.config_from_object(settings, namespace='CELERY')
 
 app.conf.beat_schedule = {
     'Check product expiry': {
-        'task': 'customer.task.check_expiry_date',
-        'schedule': crontab(hour=13, minute=11)
+        'task': 'customer.tasks.check_expiry_date',
+        'schedule': crontab(hour=16, minute=22)
     }
 }
 
